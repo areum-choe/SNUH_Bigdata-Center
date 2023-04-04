@@ -2,6 +2,10 @@
 
 # 2023 Datathon baseline model
 
+### 대회 주제
+
+COVID-19확진 환자의 기관내삽관 및 High Flow System (HFS) 시행여부를 예측하는 인공지능 모델 개발
+
 ### Data소개
 
 Table
