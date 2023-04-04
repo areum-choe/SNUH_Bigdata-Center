@@ -27,7 +27,7 @@ Age, Sex → One-Hot encoding
 결측치→ train data의 mean
 값이 너무 적은 항목 탈락 (column : 81 → 76)
 
-![Untitled](readme%20fdf84a16fd434dc2a8f37da4b4cc59d5/Untitled.png)
+![Untitled](https://user-images.githubusercontent.com/81748349/229706759-df02bd17-3dc6-4841-9905-6cc98cfd3d6b.png)
 
 ### Model Result
 
