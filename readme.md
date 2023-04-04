@@ -36,10 +36,9 @@ Result 요약
 - Train : Test = 7 : 3 = 582 : 250
 - 각 결과 Accuracy 요약
 
-![Untitled](readme%20fdf84a16fd434dc2a8f37da4b4cc59d5/Untitled%201.png)
+![Untitled (1)](https://user-images.githubusercontent.com/81748349/229707036-d2b57ee0-bca6-40b3-9761-65c4bd8dec63.png)
 
 ### Model result
 
-![Untitled](readme%20fdf84a16fd434dc2a8f37da4b4cc59d5/Untitled%202.png)
-
-![Untitled](readme%20fdf84a16fd434dc2a8f37da4b4cc59d5/Untitled%203.png)
+![Untitled (2)](https://user-images.githubusercontent.com/81748349/229707111-d16a606c-3208-40a6-abbf-7355efc5cfe3.png)
+![Untitled (3)](https://user-images.githubusercontent.com/81748349/229707152-dc1445d5-2d9d-433d-8c77-d620f96a4b19.png)
