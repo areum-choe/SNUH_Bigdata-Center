@@ -95,5 +95,4 @@ Tools: matplotlib, pandas, python, seaborn
 | Total | 4,214 |  | 3,640 |  |
 
 ![1](https://github.com/areum-choe/SNUH_Bigdata-Center/assets/81748349/8517eab3-dfe5-4cb5-a271-1d1d05921019)
-
 ![2](https://github.com/areum-choe/SNUH_Bigdata-Center/assets/81748349/2577858b-8a7a-4819-b27c-eb987dd1e3f5)
