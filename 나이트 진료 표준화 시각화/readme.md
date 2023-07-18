@@ -94,6 +94,6 @@ Tools: matplotlib, pandas, python, seaborn
 | 담당 주치의에게 알림 | 8 | 0.002 | 4 | 0.001 |
 | Total | 4,214 |  | 3,640 |  |
 
-![Untitled](%E1%84%82%E1%85%A1%E1%84%8B%E1%85%B5%E1%84%90%E1%85%B3%20%E1%84%8C%E1%85%B5%E1%86%AB%E1%84%85%E1%85%AD%20%E1%84%91%E1%85%AD%E1%84%8C%E1%85%AE%E1%86%AB%E1%84%92%E1%85%AA%20%E1%84%89%E1%85%B5%E1%84%80%E1%85%A1%E1%86%A8%E1%84%92%E1%85%AA%20c4856d0010fc4e169f74cf83174090c1/Untitled.png)
+![1](https://github.com/areum-choe/SNUH_Bigdata-Center/assets/81748349/8517eab3-dfe5-4cb5-a271-1d1d05921019)
 
-![Untitled](%E1%84%82%E1%85%A1%E1%84%8B%E1%85%B5%E1%84%90%E1%85%B3%20%E1%84%8C%E1%85%B5%E1%86%AB%E1%84%85%E1%85%AD%20%E1%84%91%E1%85%AD%E1%84%8C%E1%85%AE%E1%86%AB%E1%84%92%E1%85%AA%20%E1%84%89%E1%85%B5%E1%84%80%E1%85%A1%E1%86%A8%E1%84%92%E1%85%AA%20c4856d0010fc4e169f74cf83174090c1/Untitled%201.png)
+![2](https://github.com/areum-choe/SNUH_Bigdata-Center/assets/81748349/2577858b-8a7a-4819-b27c-eb987dd1e3f5)
