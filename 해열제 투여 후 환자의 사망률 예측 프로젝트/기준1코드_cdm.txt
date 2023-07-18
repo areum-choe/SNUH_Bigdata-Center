@@ -1,0 +1,251 @@
+-- 기준1. 2012년 이후, 발열 이후, index 약제 iv 투여된 입원건(승압제제거)
+
+-- 과정
+-- 1.2012년 이후, 발열 이후, index 약제 iv 투여된 입원건 추출 = (cdm_case1.csv)
+-- 2.탈락 : 사용후 승압제 제거 = (cdm_m1_case2.csv)
+-- 3.cdm_m1_case2에서 혈압조건확인
+-- 4.조건에 맞는 사람 grouping =(cdm_m1_case3.csv)
+
+
+-- 기준2. 2012년 이후, 발열 이후, index 약제 iv 투여된 입원건(승압제가 기준에 포함)
+
+-- 과정
+-- 1.2012년 이후, 발열 이후, index 약제 iv 투여된 입원건 추출 (cdm_case1.csv)
+-- 2.case1에서 혈압, 승압제조건확인
+-- 3.조건에 맞는 사람 grouping(cdm_m2_case2.csv)
+
+
+------------------------------------------------------------------------------------------------
+-- 1.2012년 이후, 발열 이후, index 약제 iv 투여된 입원건 추출
+
+
+--입원건 구분
+select person_id, VISIT_OCCURRENCE_ID, VISIT_DETAIL_START_DATETIME, VISIT_DETAIL_END_DATETIME, DISCHARGE_TO_CONCEPT_ID
+from CDM_2021_VIEW.VISIT_DETAIL
+where visit_detail_concept_id='9201' --입원중
+order by 4 desc;
+
+
+--입원중에 발열
+select v.person_id, v.VISIT_OCCURRENCE_ID, v.VISIT_DETAIL_START_DATETIME, v.VISIT_DETAIL_END_DATETIME,
+m.measurement_datetime, m.value_as_number, v.DISCHARGE_TO_CONCEPT_ID
+from CDM_2021_VIEW.VISIT_DETAIL v
+join CDM_2021_VIEW.MEASUREMENT m
+on  v.VISIT_OCCURRENCE_ID=m.VISIT_OCCURRENCE_ID
+where visit_detail_concept_id='9201' --입원중
+and MEASUREMENT_CONCEPT_ID='3020891' --체온
+and VALUE_AS_NUMBER>37.1 --발열
+;
+
+
+--입원중에 발열로 약물 투여 case 추출 : cdm_case1.csv
+with fever as (
+select v.person_id, v.VISIT_OCCURRENCE_ID, v.VISIT_DETAIL_START_DATETIME, v.VISIT_DETAIL_END_DATETIME,
+m.measurement_datetime, m.value_as_number, v.DISCHARGE_TO_CONCEPT_ID
+from CDM_2021_VIEW.VISIT_DETAIL v
+join CDM_2021_VIEW.MEASUREMENT m
+on  v.VISIT_OCCURRENCE_ID=m.VISIT_OCCURRENCE_ID --방문id로 붙임
+and v.VISIT_DETAIL_START_DATETIME<m.measurement_datetime and m.measurement_datetime<v.VISIT_DETAIL_END_DATETIME --입원기간 내
+where visit_detail_concept_id='9201' --입원중
+and MEASUREMENT_CONCEPT_ID='3020891' --체온
+and VALUE_AS_NUMBER>37.1 --발열
+),
+drug as(
+select fever.*, TO_CHAR(d.drug_exposure_start_datetime,'YYYY-MM-DD HH24:MI:SS') DRUG_EXPOSURE_START_DATETIME,d.ROUTE_CONCEPT_ID,d.drug_source_value, fever.measurement_datetime FEVER_DATETIME,
+rank() over(partition by d.VISIT_OCCURRENCE_ID order by d.drug_exposure_start_datetime, fever.measurement_datetime) rank
+from CDM_2021_VIEW.DRUG_EXPOSURE d
+join fever
+on fever.VISIT_OCCURRENCE_ID=d.VISIT_OCCURRENCE_ID
+and d.drug_exposure_start_datetime-fever.measurement_datetime < 0.25  --6시간 이내
+and d.drug_exposure_start_datetime-fever.measurement_datetime > 0 --열나고 이후 약처방
+where d.ROUTE_CONCEPT_ID = '4171047' and d.stop_reason is null--iv
+and (d.drug_source_value = 'AAP5I' or d.drug_concept_id = '19112656' or d.drug_concept_id = '21035250' 
+or d.drug_source_value = 'PAAPI' or d.drug_concept_id = '2028218' or d.drug_concept_id = '2028220' )
+and d.drug_exposure_start_datetime > '2011-12-31' --2012년부터
+)
+select distinct PERSON_ID, VISIT_OCCURRENCE_ID, VISIT_DETAIL_START_DATETIME, FEVER_DATETIME, DRUG_EXPOSURE_START_DATETIME, VISIT_DETAIL_END_DATETIME
+from drug
+where rank='1'
+;
+
+
+--cdm_case1 upload code
+
+--테이블생성
+create table cdm_case1 (
+PERSON_ID	VARCHAR2(50 BYTE),
+VISIT_OCCURRENCE_ID	VARCHAR2(50 BYTE) not null,
+VISIT_DETAIL_START_DATETIME	DATE,
+FEVER_DATETIME	DATE,
+DRUG_EXPOSURE_START_DATETIME	VARCHAR2(50 BYTE),
+VISIT_DETAIL_END_DATETIME	DATE
+);
+
+--case1 uplode 확인
+select * from cdm_case1; 
+
+--drug_exposure_start_datetime char->timestamp
+alter table cdm_case1 add column_copy date;
+update cdm_case1 set column_copy=to_date(DRUG_EXPOSURE_START_DATETIME,'YYYY-MM-DD HH24:MI:SS');
+alter table cdm_case1 drop column DRUG_EXPOSURE_START_DATETIME;
+alter table cdm_case1 rename column column_copy to DRUG_EXPOSURE_START_DATETIME;
+
+
+------------------------------------------------------------------------------------------------
+-- 2.탈락 : 사용후 승압제 제거 = (cdm_m1_case2.csv)
+
+
+--승압제 코드확인
+select distinct *
+from CDM_2021_VIEW.SOURCE_TO_CONCEPT_MAP
+where (source_code_description like '%Norepinephrine%' or source_code_description like '%norepinephrine%' or source_code_description like '%NOREPINEPHRINE%'
+or source_code_description like '%Epinephrine%' or source_code_description like '%epinephrine%' or source_code_description like '%EPINEPHRINE%'
+or source_code_description like '%Dopamine%' or source_code_description like '%dopamine%' or source_code_description like '%DOPAMINE%'
+or source_code_description like '%Vasopressin%' or source_code_description like '%vasopressin%' or source_code_description like '%VASOPRESSIN%'
+or source_code_description like '%Dobutamine%' or source_code_description like '%dobutamine%' or source_code_description like '%DOBUTAMINE%') 
+and target_vocabulary_id like 'Rx%';
+
+--승압제
+select distinct *
+from CDM_2021_VIEW.SOURCE_TO_CONCEPT_MAP
+where source_code like 'NEPN%' or source_code like 'EPN%' or source_code like 'DPM%' or source_code like 'VSP%' or source_code like 'DBT%'
+order by 1;
+
+--cdm_case1에서 24시간 이내 승압제투여
+with pressor as(
+select distinct person_id, VISIT_OCCURRENCE_ID, drug_concept_id, DRUG_SOURCE_VALUE, DRUG_EXPOSURE_START_DATETIME 
+from CDM_2021_VIEW.DRUG_EXPOSURE
+where ROUTE_CONCEPT_ID = '4171047' and stop_reason is null
+and (DRUG_SOURCE_VALUE like 'NEPN%' or DRUG_SOURCE_VALUE like 'EPNI%' or DRUG_SOURCE_VALUE like 'DPM%' or DRUG_SOURCE_VALUE like 'VSP%' or DRUG_SOURCE_VALUE like 'DBT%') 
+)
+select c.person_id, c.VISIT_OCCURRENCE_ID, p.drug_concept_id, p.DRUG_SOURCE_VALUE, round(p.drug_exposure_start_datetime-c.drug_exposure_start_datetime, 3) feverdrug_pressordrug_time
+from cdm_case1 c
+join pressor p 
+on c.VISIT_OCCURRENCE_ID=p.VISIT_OCCURRENCE_ID
+and p.drug_exposure_start_datetime-c.drug_exposure_start_datetime < 1  --24시간 이내
+and p.drug_exposure_start_datetime-c.drug_exposure_start_datetime > 0 --해열제 이후 승압제처방
+;
+
+
+--cdm_m1_case2 upload code
+
+--테이블생성
+create table cdm_m1_case2 (
+PERSON_ID	VARCHAR2(50 BYTE),
+VISIT_OCCURRENCE_ID	VARCHAR2(50 BYTE) not null,
+VISIT_DETAIL_START_DATETIME	DATE,
+FEVER_DATETIME	DATE,
+DRUG_EXPOSURE_START_DATETIME	VARCHAR2(50 BYTE),
+VISIT_DETAIL_END_DATETIME	DATE
+);
+
+--cdm_m1_case2 uplode 확인
+select * from cdm_m1_case2; 
+
+--drug_exposure_start_datetime char->timestamp
+alter table cdm_m1_case2 add column_copy date;
+update cdm_m1_case2 set column_copy=to_date(DRUG_EXPOSURE_START_DATETIME,'YYYY-MM-DD HH24:MI:SS');
+alter table cdm_m1_case2 drop column DRUG_EXPOSURE_START_DATETIME;
+alter table cdm_m1_case2 rename column column_copy to DRUG_EXPOSURE_START_DATETIME;
+
+
+------------------------------------------------------------------------------------------------
+-- 3.cdm_case11에서 혈압조건확인
+
+--기준1.1.sbp기준
+with bp as (
+select c.PERSON_ID, c.VISIT_OCCURRENCE_ID, c.DRUG_EXPOSURE_START_DATETIME, to_char(m.measurement_datetime,'YYYY-MM-DD HH24:MI:SS') measurement_datetime_sbp, m.measurement_concept_id, m.VALUE_AS_NUMBER, 
+rank() over(partition by m.VISIT_OCCURRENCE_ID order by m.VALUE_AS_NUMBER, m.measurement_datetime) rank --입원건으로 구분, 혈압작고 측정시간이 약물시간에 가까운 순
+from cdm_case2 c
+left outer join CDM_2021_VIEW.MEASUREMENT m
+on c.VISIT_OCCURRENCE_ID=m.VISIT_OCCURRENCE_ID
+and to_date(to_char(m.measurement_datetime,'YYYY-MM-DD HH24:MI:SS'),'YYYY-MM-DD HH24:MI:SS')-to_date(c.DRUG_EXPOSURE_START_DATETIME,'YYYY-MM-DD HH24:MI:SS') >0
+and to_date(to_char(m.measurement_datetime,'YYYY-MM-DD HH24:MI:SS'),'YYYY-MM-DD HH24:MI:SS')-to_date(c.DRUG_EXPOSURE_START_DATETIME,'YYYY-MM-DD HH24:MI:SS') < 0.25 --6시간
+where m.measurement_concept_id='3004249' --sbp
+and m.VALUE_AS_NUMBER >30  
+)
+select distinct * from bp
+where rank ='1'
+order by value_as_number;
+
+--기준1.2.mbp기준
+with bp as (
+select c.PERSON_ID, c.VISIT_OCCURRENCE_ID, c.DRUG_EXPOSURE_START_DATETIME, to_char(m.measurement_datetime,'YYYY-MM-DD HH24:MI:SS') measurement_datetime_mbp, m.measurement_concept_id, m.VALUE_AS_NUMBER, 
+rank() over(partition by m.VISIT_OCCURRENCE_ID order by m.VALUE_AS_NUMBER, m.measurement_datetime) rank --입원건으로 구분, 혈압작고 측정시간이 약물시간에 가까운 순
+from cdm_case2 c
+left outer join CDM_2021_VIEW.MEASUREMENT m
+on c.VISIT_OCCURRENCE_ID=m.VISIT_OCCURRENCE_ID
+and to_date(to_char(m.measurement_datetime,'YYYY-MM-DD HH24:MI:SS'),'YYYY-MM-DD HH24:MI:SS')-to_date(c.DRUG_EXPOSURE_START_DATETIME,'YYYY-MM-DD HH24:MI:SS') >0
+and to_date(to_char(m.measurement_datetime,'YYYY-MM-DD HH24:MI:SS'),'YYYY-MM-DD HH24:MI:SS')-to_date(c.DRUG_EXPOSURE_START_DATETIME,'YYYY-MM-DD HH24:MI:SS') < 0.25 --6시간
+where m.measurement_concept_id='3027598' --mbp
+and m.VALUE_AS_NUMBER >20  
+)
+select distinct * from bp
+where rank ='1'
+order by value_as_number;
+
+
+--기준1.3.직전혈압
+with bp_b as (
+select c.PERSON_ID, c.VISIT_OCCURRENCE_ID, c.DRUG_EXPOSURE_START_DATETIME, to_char(m.measurement_datetime,'YYYY-MM-DD HH24:MI:SS')time_sbp_b, m.VALUE_AS_NUMBER sbp_b, 
+rank() over(partition by m.VISIT_OCCURRENCE_ID order by m.measurement_datetime desc) rank_1 --입원건으로 구분,측정시간이 약물시간에 가까운 순
+from cdm_case2 c
+left outer join CDM_2021_VIEW.MEASUREMENT m
+on c.VISIT_OCCURRENCE_ID=m.VISIT_OCCURRENCE_ID
+and to_date(to_char(m.measurement_datetime,'YYYY-MM-DD HH24:MI:SS'),'YYYY-MM-DD HH24:MI:SS')-to_date(c.DRUG_EXPOSURE_START_DATETIME,'YYYY-MM-DD HH24:MI:SS') <0 --혈압이 이전, 약먹은게 이후
+where m.measurement_concept_id='3004249' --sbp
+and m.VALUE_AS_NUMBER >30
+)
+,bp_a as (
+select c.PERSON_ID, c.VISIT_OCCURRENCE_ID, c.DRUG_EXPOSURE_START_DATETIME, to_char(m.measurement_datetime,'YYYY-MM-DD HH24:MI:SS') time_sbp_a, m.VALUE_AS_NUMBER sbp_a, 
+rank() over(partition by m.VISIT_OCCURRENCE_ID order by m.VALUE_AS_NUMBER, m.measurement_datetime) rank_2 --입원건으로 구분, 혈압작고 측정시간이 약물시간에 가까운 순
+from cdm_case2 c
+left outer join CDM_2021_VIEW.MEASUREMENT m
+on c.VISIT_OCCURRENCE_ID=m.VISIT_OCCURRENCE_ID
+and to_date(to_char(m.measurement_datetime,'YYYY-MM-DD HH24:MI:SS'),'YYYY-MM-DD HH24:MI:SS')-to_date(c.DRUG_EXPOSURE_START_DATETIME,'YYYY-MM-DD HH24:MI:SS') >0 --약먹고 혈압
+and to_date(to_char(m.measurement_datetime,'YYYY-MM-DD HH24:MI:SS'),'YYYY-MM-DD HH24:MI:SS')-to_date(c.DRUG_EXPOSURE_START_DATETIME,'YYYY-MM-DD HH24:MI:SS') < 0.25 --6시간
+where m.measurement_concept_id='3004249' --sbp
+and m.VALUE_AS_NUMBER >30  
+)
+,bp_b_1 as(
+select bp_b.* from bp_b where bp_b.rank_1=1
+)
+,bp_a_1 as(
+select bp_a.* from bp_a where bp_a.rank_2=1
+)
+select bp_b_1.PERSON_ID, bp_b_1.VISIT_OCCURRENCE_ID, bp_b_1.DRUG_EXPOSURE_START_DATETIME, 
+bp_b_1.time_sbp_b, bp_a_1.time_sbp_a, bp_b_1.sbp_b, bp_a_1.sbp_a, bp_b_1.sbp_b-bp_a_1.sbp_a gap
+from bp_b_1
+join bp_a_1 on bp_b_1.VISIT_OCCURRENCE_ID=bp_a_1.VISIT_OCCURRENCE_ID;
+
+
+------------------------------------------------------------------------------------------------
+-- 4.조건에 맞는 사람 grouping =(cdm_m1_case3.csv)
+--엑셀에서 작업했는데 코드를 만들까 고민 중
+
+
+--여러 정보 붙여서 추출
+
+--psm용 age,sex,사망
+with death as (
+select c.person_id, c.visit_occurrence_id, c.bp_group,
+v.visit_start_date, to_char(c.IV_DRUGTIME, 'YYYY-MM-DD HH24:MI:SS') IV_DRUGTIME, v.visit_end_date, to_char(o.condition_start_datetime, 'YYYY-MM-DD HH24:MI:SS') condition_start_datetime
+from cdm_m2_case2 c
+join CDM_2021_VIEW.VISIT_OCCURRENCE v on c.visit_occurrence_id=v.visit_occurrence_id
+join CDM_2021_VIEW.CONDITION_OCCURRENCE o on c.visit_occurrence_id=o.visit_occurrence_id
+where o.CONDITION_type_concept_id='32815' --원내사망
+and o.condition_start_datetime - v.visit_end_date >= 0 --퇴원날짜랑 사망날짜가 같은지 재확인
+and o.condition_start_datetime - v.visit_end_date < 1
+)
+select c.*, p.gender_concept_id, p.YEAR_OF_BIRTH, d.condition_start_datetime, to_date(d.condition_start_datetime,'YYYY-MM-DD HH24:MI:SS')-to_date(d.IV_DRUGTIME,'YYYY-MM-DD HH24:MI:SS') to_death
+from cdm_m2_case2 c
+left join CDM_2021_VIEW.PERSON p on c.person_id=p.person_id
+left join death d on c.visit_occurrence_id=d.visit_occurrence_id
+;
+
+--환자진단
+select * from cdm_m2_case2 c
+join CDM_2021_VIEW.CONDITION_OCCURRENCE o
+on c.visit_occurrence_id=o.visit_occurrence_id
+where c.bp_group='not_low'
+and (o.CONDITION_STATUS_SOURCE_VALUE='주진단' or o.CONDITION_STATUS_SOURCE_VALUE='부진단');
