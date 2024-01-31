@@ -1,0 +1,433 @@
+/* 라이브러리 지정*/
+libname A "/userdata10/room583/data_source/user_data";
+libname STORE "/userdata10/room583/data_out/data_store";
+
+
+/*20231012 환자군, 대조군 재구축
+환자군: 05~17년도에 폐암인 케이스(C33  or C34 + V193 or V194) 이면서 02~04년도 폐암케이스 없는 대상자 
+대조군: 02~17년 폐암케이스 없는 대상자 */
+
+/*-------------------------------------------------------------------------------------------------*/
+/*계획*/
+
+/*환자군*/
+/*1. 기준 -> 05~17년도에 폐암인 케이스(C33  or C34 + V193 or V194) N수 구하기*/
+/*2. 기준 대상자에서 02~04년도 암 케이스(C33-, C34-) 제거한 N수 구하기*/
+/*3. 기준 대상자에서 02~04년도 암 케이스(C-) 제거한 N수 구하기*/
+
+/*모집단*/
+/* + 위 환자군 중에서 이번 연구주제인 모집단 10~16년 폐암인 케이스 (C33  or C34 + V193 or V194) N수 구하기 */
+
+/*대조군*/
+/*1. 기준 -> 02~17년도에 폐암케이스(C33  or C34 + V193 or V194)가 아닌 N수 구하기*/
+
+/*---------------------------------------------환자군----------------------------------------------------*/
+
+/*1. 기준 -> 환자군 5~17년도에 폐암인 케이스(C33  or C34 + V193 or V194) N수 구하기*/
+
+/*1-1*/
+/*2005년~ 2017년 T20. T40 년도별 테이블 생성 (2005.01.01 ~ 2017.12.31)*/
+
+/*T20*/
+data STORE.T20_2006;
+set A.T20_2006: ;
+STD_YYYY = SUBSTR(MDCARE_STRT_DT,1,4);
+run;
+
+
+data STORE.T20_2007;
+set A.T20_2007: ;
+STD_YYYY = SUBSTR(MDCARE_STRT_DT,1,4);
+run;
+/*1-2*/
+/*2005년~ 2017년 합친 테이블에서 + 상병코드 C33-,C34- */
+/*중복제거는 추 후 할 예정*/
+
+/*T20*/
+data store.t20_c33_c34_0517;
+set STORE.t20_2005 - STORE.t20_2017;
+if substr(sick_sym1,1,3) in ('C33','C34') or
+substr(sick_sym2,1,3) in ('C33','C34') or
+substr(sick_sym3,1,3) in ('C33','C34') or
+substr(sick_sym4,1,3) in ('C33','C34') or
+substr(sick_sym5,1,3) in ('C33','C34') then cancer=1;
+if cancer=1;
+run;
+
+
+/*1-3*/
+/* 위 테이블(05~17년 C33-,C34-) + V193, V194 특정기호구분*/
+
+/*T20*/
+data store.t20_c33_c34_0517_v;
+set store.t20_c33_c34_0517;
+if spcf_sym_type in ('V193','V194') then cancer_v=1;
+if cancer_v=1;
+run;
+
+
+/*1-4*/
+/* 위 테이블(05~17년 C33-,C34- + V193, V194) + 중복 제거*/
+/*중복 제거 방법 - 빠른 방문일자 id만 남겨두기*/
+
+/*T20*/
+/*① 정렬(sas는 정렬 먼저 해줘야함!! 아이디로 정렬한 후 날짜로 정렬)*/
+proc sort data=store.t20_c33_c34_0517_v;
+by indi_dscm_no mdcare_strt_dt;
+run;
+
+/*② 방문 횟수 세기(아이디별 방문 row수 찍어보기)*/
+data store.t20_c_0517_v_visit;
+set store.t20_c33_c34_0517_v;
+retain row_number 0;
+by indi_dscm_no mdcare_strt_dt;
+if first.indi_dscm_no then row_number = 1;
+else row_number+1;
+run;
+
+
+/*③ 방문 횟수 첫번째만 남기기*/
+data store.t20_c_0517_v_visit_1;
+set store.t20_c_0517_v_visit;
+if row_number=1;
+run;
+
+/*-------------------------------------------------------------------------------------------------*/
+/* t20_c_0517_v_visit_1 테이블 확인*/
+/*환자군 => 2005년 ~ 2016년도  t20테이블 + C33-,C34- + v193, v194 & 첫 방문(중복제거) n 수 > 307,458명*/
+proc contents data=store.t20_c_0517_v_visit_1;
+run;
+/*------------------------------------------case1-------------------------------------------------------*/
+
+/*2. 기준 대상자에서 02~04년도 암 케이스(C33-, C34-) 제거한 N수 구하기*/
+
+/*2-1*/
+/*02~04년도별 테이블 생성*/
+data STORE.T20_2002;
+set A.T20_2002: ;
+STD_YYYY = SUBSTR(MDCARE_STRT_DT,1,4);
+run;
+
+data STORE.T20_2003;
+set A.T20_2003: ;
+STD_YYYY = SUBSTR(MDCARE_STRT_DT,1,4);
+run;
+
+data STORE.T20_2004;
+set A.T20_2004: ;
+STD_YYYY = SUBSTR(MDCARE_STRT_DT,1,4);
+run;
+
+/*2-2*/
+/*02~04년도 테이블 합치기 + 상병코드 C33-,C34- */
+data store.t20_c33_c34_0204;
+set store.t20_2002 - a.t20_2004;
+if substr(sick_sym1,1,3) in ('C33','C34') or
+substr(sick_sym2,1,3) in ('C33','C34') or
+substr(sick_sym3,1,3) in ('C33','C34') or
+substr(sick_sym4,1,3) in ('C33','C34') or
+substr(sick_sym5,1,3) in ('C33','C34') then cancer=1;
+if cancer=1;
+run;
+
+/*2-2*/
+/* 위 테이블 + 중복제거*/
+
+/* ① 아이디별 방문 row수 찍어보기*/
+data store.t20_c33_c34_0204_visit;
+set store.t20_c33_c34_0204;
+retain row_number 0;
+by indi_dscm_no STD_YYYY;
+if first.indi_dscm_no then row_number = 1;
+else row_number+1;
+run;
+
+/* ②  방문 횟수 첫번째만 남기기*/
+data store.t20_c33_c34_0204_visit_1;
+set store.t20_c33_c34_0204_visit;
+if row_number=1;
+run;
+
+/*2-3*/
+/*(2005년 ~ 2017년 + C33-. C34- + V193, V194) - (2002년 ~ 2004년 + C33-. C34-)
+=> (t20_c_0517_v_visit_1) - ( t20_c_0517_v_visit_1 INNER JOIN t20_c33_c34_0204_visit_1)*/
+
+/*①indi_dscm_no으로 정렬*/
+proc sort data=store.t20_c_0517_v_visit_1;
+by indi_dscm_no;
+run;
+
+proc sort data=store.t20_c33_c34_0204_visit_1;
+by indi_dscm_no;
+run;
+
+/*②INNER JOIN 
+t20_c_0517_v_visit_1 & t20_c33_c34_0204_visit_1 => 05~17년도 환자 중에서 02~04년도에 C33-, C34-진단 받은 환자를 알 수 있음*/
+
+data store.join_0517_c33_c34_0204;
+merge store.t20_c_0517_v_visit_1(in=a) store.t20_c33_c34_0204_visit_1(in=b); 
+by indi_dscm_no;
+if a and b;
+run;
+/*-------------------------------------------------------------------------------------------------*/
+/*=>t20_c_0517_v_visit_1=>307,458명 -
+	  t20_c_0517_v_visit_1 & t20_c33_c34_0204_visit_1 =>16,502명
+	  = 290,956명 */
+
+/* <<<<<<<<<<<<<<<<<<<<<<<<patient_group1_all 환자군 정의>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 
+
+	- 05~17 년도 폐암인 케이스(C33-,C34- + V193, V194) 이면서 02~04년도 폐암 케이스(C33-,C34-)가 없는 대상자 = 290,956명 */
+proc sql;
+create table store.patient_group1 as
+select indi_dscm_no
+from store.t20_c_0517_v_visit_1
+except
+select indi_dscm_no from store.join_0517_c33_c34_0204;
+run;
+quit;
+
+proc sql;
+create table store.patient_group1_all as
+(select a.* ,b.* from store.patient_group1 as a left join store.t20_c_0517_v_visit_1 as b on a.indi_dscm_no=b.indi_dscm_no);
+quit;
+run;
+
+proc contents data=store.patient_group1_all;
+run;
+
+/*---------------------------------------------대조군----------------------------------------------------*/
+
+/*1. 기준 -> 02~17년도에 폐암케이스(C33  or C34 + V193 or V194)가 아닌 N수 구하기*/
+
+/*02~17년도 테이블 합치기*/
+data store.t20_0217;
+set a.t20_2002 - a.t20_2017;
+run;
+
+/*02~17년도 테이블에서 c33-, c34-. v193, v194인 테이블 생성*/
+data store.t20_c_0217_except;
+set store.t20_0217;
+if substr(sick_sym1,1,3) in ('C33','C34') or
+substr(sick_sym2,1,3) in ('C33','C34') or
+substr(sick_sym3,1,3) in ('C33','C34') or
+substr(sick_sym4,1,3) in ('C33','C34') or
+substr(sick_sym5,1,3) in ('C33','C34') then cancer=1;
+run;
+
+data store.t20_c_0217_v_except;
+set store.t20_c_0217_except;
+if spcf_sym_type in ('V193','V194') then cancer=2;
+run;
+
+/*대조군 최종*/
+
+proc sql; create table store.t20_0217_cp_final as (
+select * from store.t20_c_0217_v_except
+where cancer not in (2)  /* c33-, c34-. v193, v194인사람 제거*/
+);quit;run;
+
+proc freq data= store.t20_0217_cp_final; table std_yyyy exmd_bz_yyyy_n term; run;
+proc sql; select count(distinct indi_dscm_no) from store.t20_0217_cp_final; quit; run;
+
+proc contents data=store.t20_0217_cp_final;
+run;
+
+/*-------------------------------------------------------------------------------------------------*/
+/* 대조군=>t20_0217_cp_final=>*/
+		 
+
+
+/*---------------------------------------------모집단----------------------------------------------------*/
+
+/* + 위 환자군(patient_group1, 290,956명) 중에서 이번 연구주제인 모집단 10년~16년 폐암 케이스 (C33-,C34- + V193, V194)인 N수*/
+
+proc sql;
+create table store.population_final as select * from store.patient_group1_all where std_yyyy between '2010' and '2016';
+quit;
+run;
+
+
+/* <<<<<<<<<<<<<<<<<<<<<<<<모집단 정의>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 
+
+	- patient_group1 환자군 290,956명에서  모집단 10~16년 폐암인 케이스 (C33  or C34 + V193 or V194) N수 > population_final (173.508명)*/
+
+proc contents data=store.population_final;
+run;
+
+proc freq data=store.population_final;
+table std_yyyy;
+run;
+
+/* 년도별 n수 파악해보기*/
+proc sql;
+create table conform_yyyy as select std_yyyy, count(*) from store.population_final
+group by std_yyyy;
+quit;
+proc print;
+run;
+
+
+/*검진데이터 join (G1EQ_2009~2017)*/
+data store.G1EQ_0917;
+set a.G1EQ_2009 - a.G1EQ_2017;
+run;
+
+proc contents data=store.G1EQ_0917;
+run;
+
+
+
+/*<<<<<<<<<<<<<폐암진단 기준 앞2년 뒤2년간 검진 여부확인>>>>>>>>>>>>*/
+/*데이터 형태변환컬럼 추가 char -> num*/
+data store.population_final_1;
+set store.population_final;
+std_yyyy_n = input(std_yyyy, 4.);
+mdcare_strt_dt_n = input(mdcare_strt_dt, 8.);
+run;
+
+data store.G1EQ_0917_1;
+set store.G1EQ_0917;
+exmd_bz_yyyy_n = input(exmd_bz_yyyy, 4.);
+hme_dt_n = input(hme_dt, 8.);
+run;
+
+/*
+store.population_final_1
+진단년도 : std_yyyy_n
+진단일자 : mdcare_strt_dt_n
+
+store.G1EQ_0917_1
+검진년도 : exmd_bz_yyyy_n
+검진일자 : hme_dt_n
+*/
+
+/*폐암 이전 검진 : 검진일이 진단 2년전(2009~) ~ 폐암진단일직전 case = 133,289 id=99,539*/
+/*폐암 이전 검진 일 경우 : bf_2 = 1, af_2 = 0, term = -2,-1,0*/
+proc sql;
+create table store.subject_bf2 as
+(select distinct a.*, b.* , '1' as bf_2, '0' as af_2, b.exmd_bz_yyyy_n - a.std_yyyy_n  as term
+from store.population_final_1 as a
+join store.G1EQ_0917_1 as b
+on a.indi_dscm_no=b.indi_dscm_no and exmd_bz_yyyy_n>2008 and exmd_bz_yyyy_n<2018 and
+((a.std_yyyy_n - b.exmd_bz_yyyy_n >0 and a.std_yyyy_n - b.exmd_bz_yyyy_n <3)
+or (a.std_yyyy_n = b.exmd_bz_yyyy_n and mdcare_strt_dt_n > hme_dt_n)
+));
+quit;
+run;
+
+
+/*폐암 이후 검진 : 검진일이 폐암진단일직후 ~ 진단 2년후(~2017) case = 36,131 id=31,433*/
+/*폐암 이후 검진 일 경우 : bf_2 = 0, af_2 = 1, term = 0,1,2*/
+proc sql;
+create table store.subject_af2 as
+(select distinct a.*, b.* , '0' as bf_2, '1' as af_2, b.exmd_bz_yyyy_n - a.std_yyyy_n  as term
+from store.population_final_1 as a
+join store.G1EQ_0917_1 as b
+on a.indi_dscm_no=b.indi_dscm_no and exmd_bz_yyyy_n>2008 and exmd_bz_yyyy_n<2018 and
+((b.exmd_bz_yyyy_n - a.std_yyyy_n >0 and b.exmd_bz_yyyy_n - a.std_yyyy_n <3)
+or (a.std_yyyy_n = b.exmd_bz_yyyy_n and mdcare_strt_dt_n < hme_dt_n)
+));
+quit;
+run;
+
+proc freq data=store.subject_bf2; table std_yyyy exmd_bz_yyyy_n term bf_2 af_2; run;
+proc freq data=store.subject_af2; table std_yyyy exmd_bz_yyyy_n term bf_2 af_2; run;
+proc sql; select count(distinct indi_dscm_no) from store.subject_bf2; quit; run;
+proc sql; select count(distinct indi_dscm_no) from store.subject_af2; quit; run;
+
+
+/*b2 + af2 둘다 있는 사람만으로 해서 dataset*/
+data store.subject_bfaf2; set store.subject_bf2 store.subject_af2; run;
+
+proc sql;
+create table store.subject_bfaf2_1 as
+(select *, max(bf_2) as bf_2_ck, max(af_2) as af_2_ck from store.subject_bfaf2
+group by indi_dscm_no); quit; run;
+
+
+
+proc sql;
+create table store.subject_bfaf2_2 as
+(select * from store.subject_bfaf2_1
+where bf_2_ck='1' and af_2_ck='1'); quit; run;
+
+proc contents data= store.subject_bfaf2_2; run;
+proc freq data= store.subject_bfaf2_2; table std_yyyy exmd_bz_yyyy_n term bf_2 af_2; run;
+proc sql; select count(distinct indi_dscm_no) from store.subject_bfaf2_2; quit; run;
+
+proc sql; select count(indi_dscm_no) from store.subject_bfaf2_2 where term=0 and bf_2='1'; quit; run;
+proc sql; create table work.check_1 as (select distinct indi_dscm_no, std_yyyy from store.subject_bfaf2_2); quit; run;
+proc freq data= work.check_1; table std_yyyy; run;
+/*case=66,928, id=26,123*/
+
+
+/*흡연, 음주, 운동 null 제거전 N수 파악*/
+proc freq data=store.subject_bfaf2_2; table q_smk_yn q_smk_drt q_smk_now_drt q_smk_now_amt_v09n q_smk_now_amt_v0108; run;
+proc freq data=store.subject_bfaf2_2; table q_smk_pre_amt q_smk_pre_drt; run;
+/*
+q_smk_yn (1=34858, 2=21251, 3=10752, null=67)
+q_smk_drt (null=all, 버전차이때문에 있는 변수)
+q_smk_now_drt (0~75=10707, null=56221)
+q_smk_now_amt_v09n (1~80=10702, null=56226)
+q_smk_now_amt_v0108 (null=all, 버전차이때문에 있는 변수
+q_smk_pre_amt (null=45790, 1~90=21138)
+q_smk_pre_drt (null=45744, 0~90=21184)
+*/
+proc freq data=store.subject_bfaf2_2; table q_drk_amt_v09n q_drk_frq_v09n; run; 
+/*
+q_drk_amt_v09n (0~87=28941, 0=8560, null=37987)
+q_drk_frq_v09n (0~7=66817, 0=46973, null=111)
+*/
+proc freq data=store.subject_bfaf2_2; table q_pa_drt q_pa_frq q_pa_md q_pa_vd q_pa_walk; run; 
+/*
+q_pa_drt (null=all, 버전차이때문에 있는 변수)
+q_pa_frq (null=all, 버전차이때문에 있는 변수)
+q_pa_md (0~7=66804, null=124)
+q_pa_vd (0~7=66834, null=94)
+q_pa_walk (0~7=66809, null=119)
+
+
+
+/*-------------조건----------------*/
+/*1. 흡연상태*/
+/*2. 흡연갑년(하루평균의 갑량 * 년수)*/
+/*3. bmi*/
+/*4. 알콜섭취량 ( 12g * 주간횟수 * 잔수)/7 = 하루평균섭취량*/
+/*5. 운동 met - 시간이 없는데 어케구하지...?*/
+
+proc freq data= store.subject_bfaf2_2; table g1e_bmi g1e_wght g1e_hght; run;
+proc sql; select count(*) from store.subject_bfaf2_2 where g1e_wght>0 and g1e_hght>0 and g1e_bmi>0 ; quit;run;
+/*g1e_bmi (null=20, 11.1~48.7=66908)*/
+/*g1e_wght (null=18, 27~138=66910)*/
+/*g1e_hght (null=18, 111~196=66910)*/
+/*키 몸무게 다있으면 bmi있음 확인*/
+
+
+proc sql; create table store.subject_bfaf2_3 as (
+select *, 
+	case when q_smk_yn=3 then q_smk_now_amt_v09n / 20 * q_smk_now_drt end as smk_packyear_now,
+	case when q_smk_yn=2 then q_smk_pre_amt /20 * q_smk_pre_drt end as smk_packyear_pre,
+	case when q_drk_amt_v09n>0 and q_drk_frq_v09n>0 then q_drk_amt_v09n * q_drk_frq_v09n * 12 /7 else 0 end as drk_alcoholperday,
+	case when q_pa_vd is null then 0 end as q_pa_vd_adj,
+	case when q_pa_md is null then 0 end as q_pa_md_adj,
+	case when q_pa_walk is null then 0 end as q_pa_walk_adj
+from store.subject_bfaf2_2
+where
+(q_smk_yn=1 or 
+(q_smk_yn=2 and q_smk_pre_amt is not null and q_smk_pre_drt is not null) or 
+(q_smk_yn=3 and q_smk_now_drt is not null and q_smk_now_amt_v09n is not null)) and
+
+g1e_bmi is not null
+);
+quit; run;
+
+proc freq data= store.subject_bfaf2_3; table q_smk_yn smk_packyear_now smk_packyear_pre g1e_bmi drk_alcoholperday ; run;
+/*n=66648*/
+/*q_smk_yn (1=34845, 2=21122, 3=10681)*/
+/*smk_packyear_now (0~240=10681, null=55967)*/
+/*smk_packyear_pre (0~225=21122, null=45526) */
+/*g1e_bmi (11.1~48.7=66648)*/
+/*drk_alcoholperday (0=47028, 1~720=66648)*/
+
+/*1. 조건 완전히 정리되면 폐암 진단일과 더 가까운 건강검진일 뽑기(인당 2개의 검진자료)*/
+/*2. 대상자들 기준으로 폐암진단일 기준 3년째인날 생존여부 확인*/
